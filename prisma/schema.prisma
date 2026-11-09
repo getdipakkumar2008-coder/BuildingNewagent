@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Auth.js adapter models (database sessions). Conversations etc. arrive in M2.
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  name          String?
+  email         String?        @unique
+  emailVerified DateTime?      @map("email_verified")
+  image         String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  deletedAt     DateTime?      @map("deleted_at")
+  accounts      Account[]
+  sessions      Session[]
+  conversations Conversation[]
+  usage         UsageCounter[]
+  attachments   Attachment[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Conversation {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  title      String    @default("New chat")
+  model      String
+  mode       String    @default("chat")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  archivedAt DateTime? @map("archived_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// Messages form a tree via parent_id (edit / regenerate create siblings).
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  parentId       String?      @map("parent_id") @db.Uuid
+  role           String
+  content        Json
+  status         String       @default("complete")
+  model          String?
+  inputTokens    Int?         @map("input_tokens")
+  outputTokens   Int?         @map("output_tokens")
+  stopReason     String?      @map("stop_reason")
+  errorCode      String?      @map("error_code")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  parent         Message?     @relation("MessageTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children       Message[]    @relation("MessageTree")
+  attachments    Attachment[]
+
+  @@index([conversationId, createdAt])
+  @@index([parentId])
+  @@map("messages")
+}
+
+model UsageCounter {
+  userId       String   @map("user_id") @db.Uuid
+  day          DateTime @db.Date
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+  @@map("usage_counters")
+}
+
+// Uploaded files. message_id is null between upload and send. Bytes live in object storage under
+// storage_key (random, never derived from the filename); this row is the only way to reach them.
+model Attachment {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  messageId  String?  @map("message_id") @db.Uuid
+  filename   String
+  mime       String
+  sizeBytes  Int      @map("size_bytes")
+  sha256     String
+  storageKey String   @unique @map("storage_key")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message    Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([userId, messageId])
+  @@index([messageId])
+  @@map("attachments")
+}

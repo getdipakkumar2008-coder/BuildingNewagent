@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* DeepResearchAI design tokens — original palette, see docs/design/tokens.md */
+:root {
+  --bg: #f7f9fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f4;
+  --border: #d5dde1;
+  --text: #11232b;
+  --text-muted: #4a5f69;
+  --brand: #0e7490;
+  --brand-contrast: #ffffff;
+  --accent: #b45309;
+  --danger: #b91c1c;
+  --focus: #0e7490;
+  /* Syntax highlighting (own palette; each >= 4.5:1 on --surface-2) */
+  --tok-keyword: #6d28d9;
+  --tok-string: #047857;
+  --tok-number: #a24a08;
+  --tok-comment: #51626b;
+  --tok-title: #0e6a86;
+  --tok-attr: #9a3412;
+  --radius: 0.75rem;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+[data-theme="dark"] {
+  --bg: #0b1418;
+  --surface: #111d23;
+  --surface-2: #17272f;
+  --border: #243842;
+  --text: #e6f0f3;
+  --text-muted: #9bb2bc;
+  --brand: #5eead4;
+  --brand-contrast: #06242a;
+  --accent: #fbbf24;
+  --danger: #f87171;
+  --focus: #5eead4;
+  --tok-keyword: #c4b5fd;
+  --tok-string: #6ee7b7;
+  --tok-number: #fcd34d;
+  --tok-comment: #9bb2bc;
+  --tok-title: #7dd3fc;
+  --tok-attr: #fdba74;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-brand: var(--brand);
+  --color-brand-contrast: var(--brand-contrast);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --radius-ui: var(--radius);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Highlight.js token classes mapped to our tokens */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-meta .hljs-keyword {
+  color: var(--tok-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-meta .hljs-string {
+  color: var(--tok-string);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--tok-number);
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-deletion {
+  color: var(--tok-comment);
+  font-style: italic;
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-built_in,
+.hljs-type,
+.hljs-section {
+  color: var(--tok-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-name,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-params {
+  color: var(--tok-attr);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}

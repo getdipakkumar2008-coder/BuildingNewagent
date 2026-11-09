@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: DeepResearchAI API
+  version: 0.1.0-draft
+  description: Internal first-party API. Cookie-session auth; state-changing requests require CSRF header.
+servers:
+  - url: /api
+security:
+  - session: []
+paths:
+  /conversations:
+    get:
+      summary: List my conversations
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 200 }, description: full-text search }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationPage' } } } }
+        '401': { $ref: '#/components/responses/Problem' }
+    post:
+      summary: Create conversation (called on first send from /new)
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ConversationCreate' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Conversation' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /conversations/{id}:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    get:
+      summary: Get conversation with messages
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationDetail' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      summary: Rename / change model / archive
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ConversationPatch' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Conversation' } } } }
+    delete:
+      summary: Hard-delete conversation and attachments
+      responses:
+        '204': { description: Deleted }
+  /conversations/{id}/messages:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    post:
+      summary: Send a message; response is an SSE stream of assistant output
+      description: See streaming protocol doc. Content-Type of response is text/event-stream.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MessageCreate' } } }
+      responses:
+        '200': { description: SSE stream, content: { text/event-stream: { schema: { type: string } } } }
+        '429': { $ref: '#/components/responses/Problem' }
+  /messages/{id}/regenerate:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    post:
+      summary: Create a new assistant branch for the parent user message (SSE)
+      responses:
+        '200': { description: SSE stream, content: { text/event-stream: { schema: { type: string } } } }
+  /messages/{id}/stop:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    post:
+      summary: Stop an in-flight generation (also achieved by closing the SSE connection)
+      responses:
+        '202': { description: Accepted }
+  /attachments:
+    post:
+      summary: Upload a file (multipart)
+      requestBody:
+        content: { multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary } }, required: [file] } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Attachment' } } } }
+        '413': { $ref: '#/components/responses/Problem' }
+        '415': { $ref: '#/components/responses/Problem' }
+  /attachments/{id}:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    get:
+      summary: Download own attachment (Content-Disposition attachment, nosniff)
+      responses: { '200': { description: File } }
+    delete:
+      responses: { '204': { description: Deleted } }
+  /research-runs:
+    post:
+      summary: Start a deep-research run (queued job)
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ResearchCreate' } } }
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/ResearchRun' } } } }
+  /research-runs/{id}:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    get:
+      summary: Run state, steps, sources
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ResearchRun' } } } } }
+  /research-runs/{id}/events:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    get:
+      summary: SSE progress stream; supports Last-Event-ID resume
+      responses: { '200': { description: SSE, content: { text/event-stream: { schema: { type: string } } } } }
+  /research-runs/{id}/cancel:
+    parameters: [ { $ref: '#/components/parameters/id' } ]
+    post:
+      responses: { '202': { description: Accepted } }
+  /models:
+    get:
+      summary: Allow-listed models for the picker
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Model' } } } } } }
+  /me:
+    get:
+      responses: { '200': { description: OK } }
+    delete:
+      summary: Delete account and all data
+      responses: { '204': { description: Deleted } }
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: __Host-session }
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties: { type: { type: string }, title: { type: string }, status: { type: integer }, detail: { type: string }, code: { type: string } }
+    Model:
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: string, enum: [claude-fable-5-1, claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5] }
+        label: { type: string }
+        supports_research: { type: boolean }
+    Conversation:
+      type: object
+      required: [id, title, model, mode, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        model: { type: string }
+        mode: { type: string, enum: [chat, research] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ConversationCreate:
+      type: object
+      properties: { model: { type: string }, mode: { type: string, enum: [chat, research] } }
+    ConversationPatch:
+      type: object
+      properties: { title: { type: string, maxLength: 200 }, model: { type: string }, archived: { type: boolean } }
+    ConversationPage:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Conversation' } }, next_cursor: { type: [string, 'null'] } }
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Conversation'
+        - type: object
+          properties: { messages: { type: array, items: { $ref: '#/components/schemas/Message' } } }
+    MessageCreate:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 100000 }
+        parent_id: { type: [string, 'null'], format: uuid }
+        attachment_ids: { type: array, items: { type: string, format: uuid }, maxItems: 10 }
+    Message:
+      type: object
+      required: [id, role, content, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        parent_id: { type: [string, 'null'], format: uuid }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: array, items: { type: object } }
+        status: { type: string, enum: [streaming, complete, stopped, error] }
+        created_at: { type: string, format: date-time }
+    Attachment:
+      type: object
+      properties: { id: { type: string, format: uuid }, filename: { type: string }, mime: { type: string }, size_bytes: { type: integer }, status: { type: string } }
+    ResearchCreate:
+      type: object
+      required: [conversation_id, query]
+      properties:
+        conversation_id: { type: string, format: uuid }
+        query: { type: string, maxLength: 4000 }
+        budget: { type: object, properties: { max_searches: { type: integer, maximum: 40 }, max_minutes: { type: integer, maximum: 20 } } }
+    ResearchRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, planning, searching, reading, synthesizing, complete, failed, cancelled] }
+        plan: { type: object }
+        steps: { type: array, items: { type: object } }
+        sources: { type: array, items: { $ref: '#/components/schemas/Source' } }
+        report_message_id: { type: [string, 'null'], format: uuid }
+    Source:
+      type: object
+      properties: { id: { type: string, format: uuid }, url: { type: string, format: uri }, title: { type: string }, domain: { type: string }, retrieved_at: { type: string, format: date-time } }
